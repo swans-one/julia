@@ -8,7 +8,7 @@ for elty in (Float32, Float64, Complex64, Complex128)
         apd   = a'*a                    # symmetric positive-definite
         b     = convert(Vector{elty}, b)
         
-        capd  = cholfact(apd)              # upper Cholesky factor
+        capd  = factorize(apd)              # (Automatic) upper Cholesky factor
         r     = capd[:U]
         @test_approx_eq r'*r apd
         @test_approx_eq b apd * (capd\b)
@@ -26,19 +26,25 @@ for elty in (Float32, Float64, Complex64, Complex128)
         @test_approx_eq b apd * (cpapd\b)
         @test_approx_eq apd * inv(cpapd) eye(elty, n)
 
-        bc1   = BunchKaufman(asym) # Bunch-Kaufman factor of indefinite matrix
+        bc1   = factorize(asym) # (Automatic) Bunch-Kaufman factor of indefinite matrix
         @test_approx_eq inv(bc1) * asym eye(elty, n)
         @test_approx_eq asym * (bc1\b) b
-        bc2   = BunchKaufman(apd) # Bunch-Kaufman factors of a pos-def matrix
+        bc2   = bkfact(apd) # Bunch-Kaufman factors of a pos-def matrix
         @test_approx_eq inv(bc2) * apd eye(elty, n)
         @test_approx_eq apd * (bc2\b) b
 
-        lua   = lufact(a)                  # LU decomposition
+        lua   = factorize(a)                  # (Automatic) Square LU decomposition
         l,u,p = lua[:L], lua[:U], lua[:p]
         @test_approx_eq l*u a[p,:]
         @test_approx_eq l[invperm(p),:]*u a
         @test_approx_eq a * inv(lua) eye(elty, n)
         @test_approx_eq a*(lua\b) b
+
+        lua   = lufact(a[:,1:5])              # Thin LU
+        @test_approx_eq lua[:L]*lua[:U] lua[:P]*a[:,1:5]
+
+        lua   = lufact(a[1:5,:])              # Fat LU
+        @test_approx_eq lua[:L]*lua[:U] lua[:P]*a[1:5,:]
 
         qra   = qrfact(a)                  # QR decomposition
         q,r   = qra[:Q], qra[:R]
@@ -47,13 +53,20 @@ for elty in (Float32, Float64, Complex64, Complex128)
         @test_approx_eq q*r a
         @test_approx_eq a*(qra\b) b
 
-        qrpa  = qrpfact(a)                 # pivoted QR decomposition
+        qrpa  = factorize(a[1:5,:])                 # (Automatic) Fat pivoted QR decomposition
+        q,r,p = qrpa[:Q], qrpa[:R], qrpa[:p]
+        @test_approx_eq q'*full(q, false) eye(elty, 5)
+        @test_approx_eq q*full(q, false)' eye(elty, 5)
+        @test_approx_eq q*r a[1:5,p]
+        @test_approx_eq q*r[:,invperm(p)] a[1:5,:]
+        @test_approx_eq a[1:5,:]*(qrpa\b[1:5]) b[1:5]
+
+        qrpa  = factorize(a[:,1:5])                 # (Automatic) Thin pivoted QR decomposition
         q,r,p = qrpa[:Q], qrpa[:R], qrpa[:p]
         @test_approx_eq q'*full(q, false) eye(elty, n)
         @test_approx_eq q*full(q, false)' eye(elty, n)
         @test_approx_eq q*r a[:,p]
-        @test_approx_eq q*r[:,invperm(p)] a
-        @test_approx_eq a*(qrpa\b) b
+        @test_approx_eq q*r[:,invperm(p)] a[:,1:5]
 
         d,v   = eig(asym)              # symmetric eigen-decomposition
         @test_approx_eq asym*v[:,1] d[1]*v[:,1]
@@ -117,7 +130,6 @@ for elty in (Float32, Float64, Complex64, Complex128)
                                         # Complex vector rhs
         x = a\complex(b)
         @test_approx_eq a*x complex(b)
-
                                         # Test cond
         @test_approx_eq_eps cond(a, 1) 4.837320054554436e+02 0.01
         @test_approx_eq_eps cond(a, 2) 1.960057871514615e+02 0.01
@@ -140,7 +152,7 @@ for elty in (Float32, Float64, Complex64, Complex128)
 
         x = a[:,1:2]\b[:,1]             # Vector rhs
         @test_approx_eq ((a[:,1:2]*x-b[:,1])'*(a[:,1:2]*x-b[:,1]))[1] convert(elty, 2.546616541353384)
-    
+
         x = a[:,1:2]\b                  # Matrix rhs
         @test_approx_eq det((a[:,1:2]*x-b)'*(a[:,1:2]*x-b)) convert(elty, 4.437969924812031)
 
